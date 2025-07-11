@@ -22,7 +22,7 @@ create_release_note() {
     features=$(grep Features release/version-info.txt | cut -d":" -f2 | sed -e 's/^[[:space:]]*//')
 
     echo "Creating checksum..."
-    output_sha256=$(sha256sum release/bin/curl-linux* release/bin/curl-macos* release/bin/curl-windows* \
+    output_sha256=$(sha256sum release/bin/curl-linux* release/bin/curl-windows* \
         | sed 's#release/bin/##g' | sed 's#-# #g' | sed 's#.exe##g')
     markdown_table=$(printf "%s" "${output_sha256}" |
         awk 'BEGIN {print "| File | Platform | Arch | LibC | SHA256 |\n|------|------|------|--------|--------|"}
@@ -58,7 +58,7 @@ tar_curl() {
     cd "${RELEASE_DIR}/release/bin" || exit
     chmod +x curl-[lmw]* trurl-*;
 
-    for file in curl-linux-* curl-macos-*; do
+    for file in curl-linux-*; do
         mv "${file}" curl;
         sha256sum curl > SHA256SUMS;
         trurl_filename=$(echo "${file}" | sed 's#curl-#trurl-#g');

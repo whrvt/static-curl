@@ -75,199 +75,39 @@ init_env() {
 
     export PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig:${PREFIX}/lib64/pkgconfig";
 
-    . /etc/os-release;  # get the ID variable
+    export ID=debian
     mkdir -p "${RELEASE_DIR}/release/bin/"
 }
 
-install_packages_alpine() {
-    apk update;
-    apk upgrade;
-    apk add \
-        build-base clang automake cmake autoconf libtool binutils linux-headers \
-        curl wget git jq xz grep sed groff gnupg perl python3 \
-        ca-certificates ca-certificates-bundle \
-        cunit-dev \
-        zlib-static zlib-dev \
-        libunistring-static libunistring-dev \
-        libidn2-static libidn2-dev \
-        libpsl-static libpsl-dev \
-        zstd-static zstd-dev;
-}
-
-install_packages_debian() {
+install_packages() {
     export DEBIAN_FRONTEND=noninteractive;
     apt-get update -y > /dev/null;
     apt-get install -y apt-utils > /dev/null;
     apt-get upgrade -y > /dev/null;
     apt-get install -y automake cmake autoconf libtool binutils pkg-config \
         curl wget git jq xz-utils grep sed groff gnupg libcunit1-dev libgpg-error-dev;
-    available_clang=$(apt-cache search clang | grep -E '^clang-[0-9]+ ' | awk '{print $1}' | sort -V | tail -n 1)
-    if [ -n "${available_clang}" ]; then
-        apt-get install -y "${available_clang}";
-        CLANG_VERSION=$(echo "${available_clang}" | cut -d- -f2);
-    else
-        apt-get install -y clang;
-    fi
-}
-
-install_packages() {
-    case "${ID}" in
-        debian|ubuntu|devuan)
-            install_packages_debian ;;
-        alpine)
-            install_packages_alpine ;;
-        *)
-            echo "Unsupported distribution: ${ID}";
-            exit 1 ;;
-    esac
-}
-
-install_cross_compile() {
-    echo "Installing cross compile toolchain, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
-    change_dir;
-    local url arch_alt
-
-    if [ ! -f "github-qbt-musl-cross-make.json" ]; then
-        # GitHub API has a limit of 60 requests per hour, cache the results.
-        # if the variable is set, get the specific version
-        if [ -n "${QBT_MUSL_CROSS_MAKE_VERSION}" ]; then
-            curl --retry 5 --retry-max-time 120 -s \
-                "https://api.github.com/repos/userdocs/qbt-musl-cross-make/releases/tags/${QBT_MUSL_CROSS_MAKE_VERSION}" \
-                -o "github-qbt-musl-cross-make.json"
-        else
-            curl --retry 5 --retry-max-time 120 -s \
-                "https://api.github.com/repos/userdocs/qbt-musl-cross-make/releases" \
-                -o "github-qbt-musl-cross-make.json"
-        fi
-    fi
-
-    case "${ARCH}" in
-        armv7)
-            arch_alt=armv7l ;;
-        armv5)
-            arch_alt=arm ;;
-        *)
-            arch_alt=${ARCH} ;;
-    esac
-
-    browser_download_url=$(jq -r '.' "github-qbt-musl-cross-make.json" \
-        | grep browser_download_url \
-        | grep -i "${ARCH_HOST}-${arch_alt}-" \
-        | head -1)
-    url=$(printf "%s" "${browser_download_url}" | awk '{print $2}' | sed 's/"//g')
-    download_and_extract "${url}"
-
-    ln -s "${DIR}/${SOURCE_DIR}/${SOURCE_DIR}" "/${SOURCE_DIR}"
-    cd "/${SOURCE_DIR}/lib/"
-    mv libatomic.so libatomic.so.bak
-    ln -s libatomic.a libatomic.so
-
-    export CC="${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-cc" \
-           CXX="${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-c++" \
-           CFLAGS="-O3 -Wno-error=unknown-pragmas -Wno-error=sign-compare -Wno-error=cast-align -Wno-maybe-uninitialized -Wno-error=null-dereference" \
-           STRIP="${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-strip" \
-           PATH="${DIR}/${SOURCE_DIR}/bin":"${DIR}/${SOURCE_DIR}/${SOURCE_DIR}/bin":"$PATH"
 }
 
 install_cross_compile_debian() {
-    echo "Installing cross compile toolchain, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
-    local arch_compiler c_lib arch_name
-    arch_compiler=${ARCH}
-    c_lib=gnu
-    arch_name=${ARCH}
+    echo "Setting up compile toolchain, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
 
-    case "${ARCH}" in
-    	armv5)
-            arch_compiler=arm
-            c_lib=gnueabi
-            arch_name=arm
-            ;;
-        armv7l|armv7)
-            arch_compiler=arm
-            c_lib=gnueabihf
-            arch_name=arm
-            ;;
-        mips64|mips64el)
-            c_lib=gnuabi64
-            ;;
-        x86_64)
-            arch_name=x86-64
-            ;;
-    esac
+    export CC="${ARCH}-linux-gnu-gcc" \
+           CXX="${ARCH}-linux-gnu-g++"
 
-    apt install -y "gcc-${arch_name}-linux-${c_lib}" \
-                   "g++-${arch_name}-linux-${c_lib}" \
-                   "binutils-${arch_name}-linux-${c_lib}";
-
-    if [ -z "${CLANG_VERSION}" ]; then
-        export CC="clang -target ${arch_compiler}-linux-${c_lib}" \
-               CXX="clang++ -target ${arch_compiler}-linux-${c_lib}"
-    else
-        export CC="clang-${CLANG_VERSION} -target ${arch_compiler}-linux-${c_lib}" \
-               CXX="clang++-${CLANG_VERSION} -target ${arch_compiler}-linux-${c_lib}"
-    fi
-
-    export LD="/usr/bin/${arch_compiler}-linux-${c_lib}-ld" \
-           STRIP="/usr/bin/${arch_compiler}-linux-${c_lib}-strip" \
-           CFLAGS="-O3" \
-           LDFLAGS="--ld-path=/usr/bin/${arch_compiler}-linux-${c_lib}-ld ${LDFLAGS}";
-}
-
-install_qemu() {
-    local qemu_arch=$1
-    echo "Installing QEMU ${qemu_arch}, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
-
-    case "${ID}" in
-        debian|ubuntu|devuan)
-            apt-get install -y qemu-user-static > /dev/null ;;
-        alpine)
-            apk add "qemu-${qemu_arch}" ;;
-    esac
+    export LD="/usr/bin/${ARCH}-linux-gnu-ld" \
+           STRIP="/usr/bin/${ARCH}-linux-gnu-strip" \
+           CFLAGS="-Os"
 }
 
 arch_variants() {
     echo "Setting up the ARCH and OpenSSL arch, Arch: ${ARCH}"
-    local qemu_arch
-
     EC_NISTP_64_GCC_128=""
     OPENSSL_ARCH=""
 
     case "${ARCH}" in
-        x86_64)         qemu_arch="x86_64"
-                        EC_NISTP_64_GCC_128="enable-ec_nistp_64_gcc_128"
-                        if [ "${ID}" = "alpine" ] && [ "${ARCH}" != "${ARCH_HOST}" ] || [ "${LIBC}" = "musl" ]; then
-                            OPENSSL_ARCH="linux-x86_64";
-                        else
-                            OPENSSL_ARCH="linux-x86_64-clang";
-                        fi ;;
-        aarch64)        qemu_arch="aarch64"
-                        EC_NISTP_64_GCC_128="enable-ec_nistp_64_gcc_128"
-                        OPENSSL_ARCH="linux-aarch64" ;;
-        armv5)          qemu_arch="arm"
-                        OPENSSL_ARCH="linux-armv4" ;;
-        armv7*|armv6)   qemu_arch="arm"
-                        OPENSSL_ARCH="linux-armv4" ;;
-        i686)           qemu_arch="i386"
-                        OPENSSL_ARCH="linux-x86" ;;
-        riscv64)        qemu_arch="riscv64"
-                        EC_NISTP_64_GCC_128="enable-ec_nistp_64_gcc_128"
-                        OPENSSL_ARCH="linux64-riscv64" ;;
-        s390x)          qemu_arch="s390x"
-                        OPENSSL_ARCH="linux64-s390x" ;;
-        mips64)         qemu_arch="mips64"
-                        OPENSSL_ARCH="linux64-mips64" ;;
-        mips64el)       qemu_arch="mips64el"
-                        OPENSSL_ARCH="linux64-mips64" ;;
-        mips)           qemu_arch="mips"
-                        OPENSSL_ARCH="linux-mips32" ;;
-        mipsel)         qemu_arch="mipsel"
-                        OPENSSL_ARCH="linux-mips32" ;;
-        powerpc64le)    qemu_arch="ppc64le"
-                        OPENSSL_ARCH="linux-ppc64le" ;;
-        powerpc)        qemu_arch="ppc"
-                        OPENSSL_ARCH="linux-ppc" ;;
-        loongarch64)    qemu_arch="loongarch64"
-                        OPENSSL_ARCH="linux64-loongarch64" ;;
+        x86_64) EC_NISTP_64_GCC_128="enable-ec_nistp_64_gcc_128"
+                OPENSSL_ARCH="linux-x86_64" ;;
+        i686)   OPENSSL_ARCH="linux-x86" ;;
     esac
 
     unset LD STRIP LDFLAGS
@@ -275,27 +115,7 @@ arch_variants() {
     export LDFLAGS="-L${PREFIX}/lib -L${PREFIX}/lib64";
     libc_flag="-glibc";
 
-    if [ "${ARCH}" != "${ARCH_HOST}" ] || [ "${LIBC}" = "musl" ]; then
-        # If the architecture is not the same as the host, or it is Alpine, then cross compile
-        install_qemu "${qemu_arch}";
-
-        if [ "${LIBC}" = "musl" ] || [ "${ID}" = "alpine" ]; then
-            # Alpine does not have a GCC cross-compile toolchain.
-            # Therefore, musl-cross-make is used for compilation.
-            install_cross_compile;
-            libc_flag="-musl";
-        else
-            # Uses Clang for default cross-compilation
-            install_cross_compile_debian;
-        fi
-    else
-        # If the architecture is the same as the host, no need to cross compile
-        if [ -z "${CLANG_VERSION}" ]; then
-            export CC=clang CXX=clang++
-        else
-            export CC="clang-${CLANG_VERSION}" CXX="clang++-${CLANG_VERSION}"
-        fi
-    fi
+    install_cross_compile_debian;
 }
 
 _get_github() {
@@ -775,7 +595,7 @@ curl_config() {
             --enable-alt-svc --enable-websockets \
             --enable-ipv6 --enable-unix-sockets --enable-socketpair \
             --enable-headers-api --enable-versioned-symbols \
-            --enable-threaded-resolver --enable-optimize --enable-pthreads \
+            --enable-threaded-resolver --enable-optimize \
             --enable-warnings --enable-werror \
             --enable-curldebug --enable-dict --enable-netrc \
             --enable-bearer-auth --enable-tls-srp --enable-dnsshuffle \
@@ -852,24 +672,6 @@ _arch_match() {
     done
 
     return 1            # not in the array
-}
-
-_arch_valid() {
-    # Mapping of supported target architectures for different host platforms:
-    # - When host is x86_64: supports building for x86_64, aarch64, i686, etc.
-    # - When host is aarch64: supports building for x86_64, aarch64, etc.
-    local arch_x86_64="x86_64 aarch64 armv5 armv7 armv7l riscv64 s390x mips64 mips64el powerpc64le mipsel i686 mips powerpc loongarch64"
-    local arch_aarch64="x86_64 aarch64 armv5 armv7 armv7l riscv64 s390x mips64 mips64el powerpc64le mipsel i686 mips powerpc loongarch64"
-
-    if [ "${ARCH_HOST}" = "x86_64" ]; then
-        result=$(_arch_match "${ARCH}" "${arch_x86_64}")
-    elif [ "${ARCH_HOST}" = "aarch64" ]; then
-        result=$(_arch_match "${ARCH}" "${arch_aarch64}")
-    else
-        result=1
-    fi
-
-    return ${result}
 }
 
 _build_in_docker() {
@@ -974,11 +776,7 @@ main() {
         echo "Architecture: ${ARCH}"
         echo "Prefix directory: ${PREFIX}"
 
-        if _arch_valid; then
-            compile;
-        else
-            echo "Unsupported architecture ${ARCH} in ${ARCH_HOST}";
-        fi
+        compile;
     done
 }
 

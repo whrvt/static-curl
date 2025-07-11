@@ -72,14 +72,18 @@ jobs:
 
       - name: Set up environment
         run: |
-          VERSION=`cat release/version.txt`
+          VERSION_FILE="$(find / -wholename "*release/version.txt" -print0)"
+          VERSION="$(cat $VERSION_FILE)"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION_FILE=$VERSION_FILE" >> $GITHUB_ENV
+          RELEASE_DIRECTORY="$(dirname $VERSION_FILE)"
+          echo "RELEASE_DIRECTORY=$RELEASE_DIRECTORY" >> $GITHUB_ENV
 
       - name: Upload artifact (version)
         uses: actions/upload-artifact@v4
         with:
           name: curl-version
-          path: release/version.txt
+          path: ${{ env.VERSION_FILE }}
           retention-days: 90
           if-no-files-found: error
           overwrite: true
@@ -88,7 +92,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: curl-binary-linux-${{ env.VERSION }}
-          path: release
+          path: ${{ env.RELEASE_DIRECTORY }}
           retention-days: 90
           if-no-files-found: error
           overwrite: true

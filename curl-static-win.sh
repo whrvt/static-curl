@@ -100,7 +100,7 @@ configure_toolchain() {
            CXX="${ARCH}-w64-mingw32-clang++" \
            LD="${mingw_path}/bin/${ARCH}-w64-mingw32-ld" \
            STRIP="${mingw_path}/bin/${ARCH}-w64-mingw32-strip" \
-           CFLAGS="-O3" \
+           CFLAGS="-Os -ffunction-sections -fdata-sections" \
            CPPFLAGS="-I${mingw_path}/${ARCH}-w64-mingw32/include" \
            CPPFLAGS="-I${mingw_path}/generic-w64-mingw32/include ${CPPFLAGS}" \
            LDFLAGS="--ld-path=${mingw_path}/bin/${ARCH}-w64-mingw32-ld ${LDFLAGS}" \
@@ -678,7 +678,7 @@ compile_curl() {
         cflags_extra=""
     fi
 
-    make -j "$(nproc)" LDFLAGS="-static -all-static -Wl,-s ${LDFLAGS}" CFLAGS="$cflags_extra ${CFLAGS}";
+    make -j "$(nproc)" LDFLAGS="-static -all-static -Wl,-s,--gc-sections ${LDFLAGS}" CFLAGS="$cflags_extra ${CFLAGS}";
 
     _copy_license COPYING curl;
     make install;

@@ -33,6 +33,8 @@
 #     mstorsjo/llvm-mingw:latest sh curl-static-win.sh
 # Supported architectures: x86_64 i686 aarch64 armv7
 
+readonly SCRIPT_DIR="$(realpath "$(dirname "$0")")"
+
 init_env() {
     export DIR=${DIR:-/data};
     export RELEASE_DIR=${RELEASE_DIR:-/mnt};
@@ -81,10 +83,18 @@ install_packages_debian() {
         curl wget git jq xz-utils grep sed groff gnupg libcunit1-dev libgpg-error-dev;
 }
 
+install_packages_arch() {
+    pacman -Syu --noconfirm pkgconf ccache git nodejs npm gcc gcc-libs \
+        lib32-gcc-libs mingw-w64-binutils mingw-w64-gcc mingw-w64-crt mingw-w64-headers mingw-w64-winpthreads \
+        automake cmake autoconf ninja grep sed autoconf-archive libtool jq curl wget xz groff cunit libgpg-error
+}
+
 install_packages() {
     case "${ID}" in
         debian|ubuntu|devuan)
             install_packages_debian ;;
+        arch)
+            install_packages_arch ;;
         *)
             echo "Unsupported distribution: ${ID}";
             exit 1 ;;
@@ -93,18 +103,19 @@ install_packages() {
 
 configure_toolchain() {
     echo "Configuring compile toolchain, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
-    local mingw_path
-    mingw_path="/opt/llvm-mingw"
 
-    export CC="${ARCH}-w64-mingw32-clang" \
-           CXX="${ARCH}-w64-mingw32-clang++" \
-           LD="${mingw_path}/bin/${ARCH}-w64-mingw32-ld" \
-           STRIP="${mingw_path}/bin/${ARCH}-w64-mingw32-strip" \
+    export CC="${ARCH}-w64-mingw32-gcc" \
+           CXX="${ARCH}-w64-mingw32-g++" \
+           LD="${ARCH}-w64-mingw32-ld" \
+           STRIP="${ARCH}-w64-mingw32-strip" \
            CFLAGS="-Os -ffunction-sections -fdata-sections" \
-           CPPFLAGS="-I${mingw_path}/${ARCH}-w64-mingw32/include" \
-           CPPFLAGS="-I${mingw_path}/generic-w64-mingw32/include ${CPPFLAGS}" \
-           LDFLAGS="--ld-path=${mingw_path}/bin/${ARCH}-w64-mingw32-ld ${LDFLAGS}" \
-           LDFLAGS="-L${mingw_path}/${ARCH}-w64-mingw32/lib ${LDFLAGS}";
+           CPPFLAGS=""
+
+    case "${ARCH}" in
+        i686)
+            export CPPFLAGS="-DWINVER=0x0501 -D_WIN32_WINNT=0x0501 -D_WIN32_WINDOWS=0x0501 -D_WIN32_IE=0x0501";
+            export CFLAGS="-DWINVER=0x0501 -D_WIN32_WINNT=0x0501 -D_WIN32_WINDOWS=0x0501 -D_WIN32_IE=0x0501 $CFLAGS" ;;
+    esac
 }
 
 arch_variants() {
@@ -292,7 +303,7 @@ compile_zlib() {
     cd out/
 
     PKG_CONFIG="pkg-config --static --with-path=${PREFIX}/lib/pkgconfig:${PREFIX}/lib64/pkgconfig" \
-            cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Windows -DBUILD_SHARED_LIBS=OFF \
+            cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Windows -DBUILD_SHARED_LIBS=OFF \
                   -DCMAKE_INSTALL_PREFIX="${PREFIX}" .. ;
     PKG_CONFIG="pkg-config --static --with-path=${PREFIX}/lib/pkgconfig:${PREFIX}/lib64/pkgconfig" \
         cmake --build . --config Release --target install;
@@ -363,9 +374,21 @@ compile_ares() {
     local url
     change_dir;
 
-    url_from_github c-ares/c-ares "${ARES_VERSION}"
-    url="${URL}"
-    download_and_extract "${url}"
+    if [ "${ARES_VERSION:-}" = "latest" ]; then
+        url="https://github.com/c-ares/c-ares/archive/refs/heads/main.tar.gz"
+        download_and_extract "${url}"
+        if [ "${ARCH}" = "i686" ]; then
+            sed -i -e 's|.*ConvertInterface.*||g' \
+                   -e 's|.*if_indextoname.*||g' \
+                   -e 's|.*if_nametoindex.*||g' \
+                    configure.ac # broken mingw headers
+        fi
+        autoreconf -fiv
+    else
+        url_from_github c-ares/c-ares "${ARES_VERSION}"
+        url="${URL}"
+        download_and_extract "${url}"
+    fi
 
     ./configure --host="${TARGET}" --prefix="${PREFIX}" --enable-static --disable-shared;
     make -j "$(nproc)";
@@ -419,7 +442,7 @@ compile_tls() {
     ./Configure \
         --cross-compile-prefix="${TARGET}-" \
         ${openssl_arch} \
-        CC=clang CXX=clang++ \
+        CC=gcc CXX=g++ \
         -fPIC \
         --prefix="${PREFIX}" \
         threads no-shared \
@@ -532,7 +555,7 @@ compile_brotli() {
     cd out/
 
     PKG_CONFIG="pkg-config --static" \
-        cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Windows -DBUILD_SHARED_LIBS=OFF \
+        cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Windows -DBUILD_SHARED_LIBS=OFF \
               -DCMAKE_COMPILE_PREFIX="${TARGET}" -DCMAKE_INSTALL_PREFIX="${PREFIX}" .. ;
     PKG_CONFIG="pkg-config --static" \
         cmake --build . --config Release --target install;
@@ -553,10 +576,13 @@ compile_zstd() {
     url="${URL}"
     download_and_extract "${url}"
 
+    # add compatibility patch
+    patch -Np1<"${SCRIPT_DIR}"/zstd-winxp-threads.patch
+
     mkdir -p build/cmake/out/
     cd build/cmake/out/
 
-    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
+    cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
           -DZSTD_BUILD_STATIC=ON -DZSTD_BUILD_SHARED=OFF ..;
     cmake --build . --config Release --target install;
 
@@ -670,10 +696,6 @@ compile_curl() {
     if [ "${ARCH}" = "armv7" ] || [ "${ARCH}" = "i686" ]; then
         # add -Wno-cast-align to avoid error alignment from 4 to 8
         cflags_extra="-Wno-cast-align"
-    elif [ "${ARCH}" = "x86_64" ]; then
-        # add -Wno-error=shorten-64-to-32 to disable conversion check
-        # https://github.com/curl/curl/issues/12861
-        cflags_extra="-Wno-error=shorten-64-to-32"
     else
         cflags_extra=""
     fi

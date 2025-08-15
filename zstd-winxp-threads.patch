@@ -1,0 +1,233 @@
+From 595467355f1e18d083c3358ea536598f6991c506 Mon Sep 17 00:00:00 2001
+From: William Horvath <william@horvath.blog>
+Date: Fri, 15 Aug 2025 14:00:36 -0700
+Subject: [PATCH] add windows xp-compatible CV implementation for threading
+ support
+
+---
+ lib/common/threading.c | 144 +++++++++++++++++++++++++++++++++++++++++
+ lib/common/threading.h |  37 +++++++++--
+ 2 files changed, 175 insertions(+), 6 deletions(-)
+
+diff --git a/lib/common/threading.c b/lib/common/threading.c
+index 25bb8b98..53f2dc15 100644
+--- a/lib/common/threading.c
++++ b/lib/common/threading.c
+@@ -130,6 +130,150 @@ int ZSTD_pthread_join(ZSTD_pthread_t thread)
+     }
+ }
+ 
++#ifdef WINXP_COMPAT
++/* Windows XP compatible condition variable implementation
++ * Based on "Strategies for Implementing POSIX Condition Variables on Win32"
++ * by Douglas C. Schmidt and Irfan Pyarali
++ * http://www.cs.wustl.edu/~schmidt/win32-cv-1.html
++ */
++
++int ZSTD_pthread_cond_init(ZSTD_pthread_cond_t* cond, const void* unused)
++{
++    (void)unused;
++
++    if (cond == NULL) return EINVAL;
++
++    cond->waiters_count = 0;
++    cond->was_broadcast = 0;
++
++    InitializeCriticalSection(&cond->waiters_lock);
++
++    cond->waiters_sema = CreateSemaphore(NULL, 0, 0x7fffffff, NULL);
++    if (cond->waiters_sema == NULL) {
++        DeleteCriticalSection(&cond->waiters_lock);
++        return ENOMEM;
++    }
++
++    cond->waiters_done_event = CreateEvent(NULL, FALSE, FALSE, NULL);
++    if (cond->waiters_done_event == NULL) {
++        CloseHandle(cond->waiters_sema);
++        DeleteCriticalSection(&cond->waiters_lock);
++        return ENOMEM;
++    }
++
++    return 0;
++}
++
++int ZSTD_pthread_cond_destroy(ZSTD_pthread_cond_t* cond)
++{
++    if (cond == NULL) return EINVAL;
++
++    CloseHandle(cond->waiters_done_event);
++    DeleteCriticalSection(&cond->waiters_lock);
++    CloseHandle(cond->waiters_sema);
++
++    return 0;
++}
++
++int ZSTD_pthread_cond_wait(ZSTD_pthread_cond_t* cond, ZSTD_pthread_mutex_t* mutex)
++{
++    int last_waiter;
++
++    if (cond == NULL || mutex == NULL) return EINVAL;
++
++    /* avoid race conditions */
++    EnterCriticalSection(&cond->waiters_lock);
++    cond->waiters_count++;
++    LeaveCriticalSection(&cond->waiters_lock);
++
++    /* atomically release the mutex and wait on the semaphore until
++     * signal or broadcast are called by another thread
++     * NOTE: since we're using CRITICAL_SECTION instead of mutex HANDLE,
++     * we can't use SignalObjectAndWait and must do this in two steps */
++    LeaveCriticalSection(mutex);
++    WaitForSingleObject(cond->waiters_sema, INFINITE);
++
++    /* reacquire lock to avoid race conditions */
++    EnterCriticalSection(&cond->waiters_lock);
++
++    /* we're no longer waiting */
++    cond->waiters_count--;
++
++    /* check to see if we're the last waiter after broadcast */
++    last_waiter = cond->was_broadcast && cond->waiters_count == 0;
++
++    LeaveCriticalSection(&cond->waiters_lock);
++
++    /* if we're the last waiter thread during this particular broadcast
++     * then let all the other threads proceed */
++    if (last_waiter) {
++        SetEvent(cond->waiters_done_event);
++    }
++
++    /* always regain the external mutex since that's the guarantee we
++     * give to our callers */
++    EnterCriticalSection(mutex);
++
++    return 0;
++}
++
++int ZSTD_pthread_cond_signal(ZSTD_pthread_cond_t* cond)
++{
++    int have_waiters;
++
++    if (cond == NULL) return EINVAL;
++
++    EnterCriticalSection(&cond->waiters_lock);
++    have_waiters = cond->waiters_count > 0;
++    LeaveCriticalSection(&cond->waiters_lock);
++
++    /* if there aren't any waiters, then this is a no-op */
++    if (have_waiters) {
++        ReleaseSemaphore(cond->waiters_sema, 1, 0);
++    }
++
++    return 0;
++}
++
++int ZSTD_pthread_cond_broadcast(ZSTD_pthread_cond_t* cond)
++{
++    int have_waiters = 0;
++
++    if (cond == NULL) return EINVAL;
++
++    /* this is needed to ensure that waiters_count and was_broadcast are
++     * consistent relative to each other */
++    EnterCriticalSection(&cond->waiters_lock);
++
++    if (cond->waiters_count > 0) {
++        /* we are broadcasting, even if there is just one waiter...
++         * record that we are broadcasting, which helps optimize
++         * pthread_cond_wait for the non-broadcast case */
++        cond->was_broadcast = 1;
++        have_waiters = 1;
++    }
++
++    if (have_waiters) {
++        /* wake up all the waiters atomically */
++        ReleaseSemaphore(cond->waiters_sema, cond->waiters_count, 0);
++
++        LeaveCriticalSection(&cond->waiters_lock);
++
++        /* wait for all the awakened threads to acquire the counting semaphore */
++        WaitForSingleObject(cond->waiters_done_event, INFINITE);
++
++        /* this assignment is okay, even without the waiters_lock held
++         * because no other waiter threads can wake up to access it */
++        cond->was_broadcast = 0;
++    } else {
++        LeaveCriticalSection(&cond->waiters_lock);
++    }
++
++    return 0;
++}
++
++#endif /* WINXP_COMPAT */
++
+ #endif   /* ZSTD_MULTITHREAD */
+ 
+ #if defined(ZSTD_MULTITHREAD) && DEBUGLEVEL >= 1 && !defined(_WIN32)
+diff --git a/lib/common/threading.h b/lib/common/threading.h
+index e123cdf1..0339894b 100644
+--- a/lib/common/threading.h
++++ b/lib/common/threading.h
+@@ -21,15 +21,23 @@
+ /**
+  * Windows minimalist Pthread Wrapper
+  */
+-#ifdef WINVER
+-#  undef WINVER
++#if defined(WINVER)
++#  if WINVER > 0x0600
++#    undef WINVER
++#    define WINVER 0x0600
++#  elif !defined(WINXP_COMPAT) && WINVER >= 0x0501
++#    define WINXP_COMPAT
++#  endif
+ #endif
+-#define WINVER       0x0600
+ 
+-#ifdef _WIN32_WINNT
+-#  undef _WIN32_WINNT
++#if defined(_WIN32_WINNT)
++#  if _WIN32_WINNT > 0x0600
++#    undef _WIN32_WINNT
++#    define _WIN32_WINNT 0x0600
++#  elif !defined(WINXP_COMPAT) && _WIN32_WINNT >= 0x0501
++#    define WINXP_COMPAT
++#  endif
+ #endif
+-#define _WIN32_WINNT 0x0600
+ 
+ #ifndef WIN32_LEAN_AND_MEAN
+ #  define WIN32_LEAN_AND_MEAN
+@@ -49,12 +57,29 @@
+ #define ZSTD_pthread_mutex_unlock(a)   LeaveCriticalSection((a))
+ 
+ /* condition variable */
++#ifndef WINXP_COMPAT
+ #define ZSTD_pthread_cond_t             CONDITION_VARIABLE
+ #define ZSTD_pthread_cond_init(a, b)    ((void)(b), InitializeConditionVariable((a)), 0)
+ #define ZSTD_pthread_cond_destroy(a)    ((void)(a))
+ #define ZSTD_pthread_cond_wait(a, b)    SleepConditionVariableCS((a), (b), INFINITE)
+ #define ZSTD_pthread_cond_signal(a)     WakeConditionVariable((a))
+ #define ZSTD_pthread_cond_broadcast(a)  WakeAllConditionVariable((a))
++#else
++/* Windows XP compatible condition variable implementation */
++typedef struct {
++    CRITICAL_SECTION waiters_lock;    /* protects the waiters count */
++    HANDLE waiters_sema;              /* semaphore for waiting threads */
++    HANDLE waiters_done_event;        /* auto-reset event for broadcast synchronization */
++    size_t waiters_count;             /* number of waiting threads */
++    int was_broadcast;                /* flag to track broadcast vs signal */
++} ZSTD_pthread_cond_t;
++
++int ZSTD_pthread_cond_init(ZSTD_pthread_cond_t* cond, const void* unused);
++int ZSTD_pthread_cond_destroy(ZSTD_pthread_cond_t* cond);
++int ZSTD_pthread_cond_wait(ZSTD_pthread_cond_t* cond, ZSTD_pthread_mutex_t* mutex);
++int ZSTD_pthread_cond_signal(ZSTD_pthread_cond_t* cond);
++int ZSTD_pthread_cond_broadcast(ZSTD_pthread_cond_t* cond);
++#endif
+ 
+ /* ZSTD_pthread_create() and ZSTD_pthread_join() */
+ typedef HANDLE ZSTD_pthread_t;
+-- 
+2.50.1
+

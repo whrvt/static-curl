@@ -307,6 +307,7 @@ compile_zlib() {
                   -DCMAKE_INSTALL_PREFIX="${PREFIX}" .. ;
     PKG_CONFIG="pkg-config --static --with-path=${PREFIX}/lib/pkgconfig:${PREFIX}/lib64/pkgconfig" \
         cmake --build . --config Release --target install;
+    ln -s -r "${PREFIX}/lib/libzlibstatic.a" "${PREFIX}/lib/libz.a";
 
     _copy_license ../LICENSE zlib;
 }

@@ -114,7 +114,8 @@ configure_toolchain() {
     case "${ARCH}" in
         i686)
             export CPPFLAGS="-DWINVER=0x0501 -D_WIN32_WINNT=0x0501 -D_WIN32_WINDOWS=0x0501 -D_WIN32_IE=0x0501";
-            export CFLAGS="-DWINVER=0x0501 -D_WIN32_WINNT=0x0501 -D_WIN32_WINDOWS=0x0501 -D_WIN32_IE=0x0501 $CFLAGS" ;;
+            export CFLAGS="-DWINVER=0x0501 -D_WIN32_WINNT=0x0501 -D_WIN32_WINDOWS=0x0501 -D_WIN32_IE=0x0501 -mcrtdll=msvcrt-os $CFLAGS" ;
+            export LDFLAGS="-mcrtdll=msvcrt-os $LDFLAGS";;
     esac
 }
 

@@ -67,6 +67,7 @@ init_env() {
     echo "libssh2 version: ${LIBSSH2_VERSION}"
     echo "c-ares version: ${ARES_VERSION}"
     echo "trurl version: ${TRURL_VERSION}"
+    echo "llvm-mingw version: ${LLVM_MINGW_VERSION}"
 
     export PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig:${PREFIX}/lib64/pkgconfig";
 
@@ -81,12 +82,17 @@ install_packages_debian() {
     apt-get upgrade -y > /dev/null;
     apt-get install -y automake cmake autoconf libtool pkg-config \
         curl wget git jq xz-utils grep sed groff gnupg libcunit1-dev libgpg-error-dev;
+    # TODO: llvm-mingw here
 }
 
 install_packages_arch() {
     pacman -Syu --noconfirm pkgconf ccache git nodejs npm gcc gcc-libs \
         lib32-gcc-libs mingw-w64-binutils mingw-w64-gcc mingw-w64-crt mingw-w64-headers mingw-w64-winpthreads \
         automake cmake autoconf ninja grep sed autoconf-archive libtool jq curl wget xz groff cunit libgpg-error
+
+    mkdir -p /opt/llvm-mingw && \
+    wget -qO /opt/llvm-mingw/llvm-mingw.tar.xz "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-ubuntu-22.04-x86_64.tar.xz" && \
+    tar xf /opt/llvm-mingw/llvm-mingw.tar.xz -C /opt/llvm-mingw --strip-components=1
 }
 
 install_packages() {
@@ -101,20 +107,32 @@ install_packages() {
     esac
 }
 
+
 configure_toolchain() {
     echo "Configuring compile toolchain, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
 
-    export CC="${ARCH}-w64-mingw32-gcc" \
-           CXX="${ARCH}-w64-mingw32-g++" \
-           LD="${ARCH}-w64-mingw32-ld" \
-           STRIP="${ARCH}-w64-mingw32-strip" \
-           CFLAGS="-Os -ffunction-sections -fdata-sections" \
-           CPPFLAGS=""
+    local mingw_path
+    mingw_path="/opt/llvm-mingw"
 
     case "${ARCH}" in
-        i686)
-            export CPPFLAGS="-DWINVER=0x0501 -D_WIN32_WINNT=0x0501 -D_WIN32_WINDOWS=0x0501 -D_WIN32_IE=0x0501";
-            export CFLAGS="-DWINVER=0x0501 -D_WIN32_WINNT=0x0501 -D_WIN32_WINDOWS=0x0501 -D_WIN32_IE=0x0501 $CFLAGS" ;;
+    i686)
+        export CC="${ARCH}-w64-mingw32-gcc" \
+            CXX="${ARCH}-w64-mingw32-g++" \
+            LD="${ARCH}-w64-mingw32-ld" \
+            STRIP="${ARCH}-w64-mingw32-strip" \
+            CFLAGS="-DWINVER=0x0501 -D_WIN32_WINNT=0x0501 -D_WIN32_WINDOWS=0x0501 -D_WIN32_IE=0x0501 -Os -ffunction-sections -fdata-sections" \
+            CPPFLAGS="-DWINVER=0x0501 -D_WIN32_WINNT=0x0501 -D_WIN32_WINDOWS=0x0501 -D_WIN32_IE=0x0501"
+        ;;
+    x86_64)
+        export PATH="${mingw_path}/bin:${PATH}" \
+            CC="${ARCH}-w64-mingw32-clang" \
+            CXX="${ARCH}-w64-mingw32-clang++" \
+            LD="${mingw_path}/bin/${ARCH}-w64-mingw32-ld" \
+            STRIP="${mingw_path}/bin/${ARCH}-w64-mingw32-strip" \
+            CFLAGS="-Os -ffunction-sections -fdata-sections" \
+            CPPFLAGS="-I${mingw_path}/generic-w64-mingw32/include -I${mingw_path}/${ARCH}-w64-mingw32/include" \
+            LDFLAGS="-L${mingw_path}/${ARCH}-w64-mingw32/lib --ld-path=${mingw_path}/bin/${ARCH}-w64-mingw32-ld ${LDFLAGS}"
+        ;;
     esac
 }
 
@@ -400,7 +418,10 @@ compile_ares() {
 
 compile_tls() {
     echo "Compiling ${TLS_LIB}, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
-    local url openssl_arch ec_nistp_64_gcc_128
+    local url openssl_arch ec_nistp_64_gcc_128 cc cxx
+    cc=clang
+    cxx=clang++
+
     change_dir;
 
     if [ "${TLS_LIB}" = "quictls" ]; then
@@ -437,13 +458,15 @@ compile_tls() {
                                 multilib         => "",
                             }
                         );' > Configurations/11-curl-mingwarm.conf;;
-        i686)       openssl_arch="mingw" ;;
+        i686)       openssl_arch="mingw"
+                    cc="gcc"
+                    cxx="g++"
     esac
 
     ./Configure \
         --cross-compile-prefix="${TARGET}-" \
         ${openssl_arch} \
-        CC=gcc CXX=g++ \
+        CC=$cc CXX=$cxx \
         -fPIC \
         --prefix="${PREFIX}" \
         threads no-shared \
@@ -697,6 +720,10 @@ compile_curl() {
     if [ "${ARCH}" = "armv7" ] || [ "${ARCH}" = "i686" ]; then
         # add -Wno-cast-align to avoid error alignment from 4 to 8
         cflags_extra="-Wno-cast-align"
+    elif [ "${ARCH}" = "x86_64" ]; then
+        # add -Wno-error=shorten-64-to-32 to disable conversion check
+        # https://github.com/curl/curl/issues/12861
+        cflags_extra="-Wno-error=shorten-64-to-32"
     else
         cflags_extra=""
     fi
@@ -799,6 +826,7 @@ _build_in_docker() {
         -e LIBIDN2_VERSION="${LIBIDN2_VERSION}" \
         -e ENABLE_TRURL="${ENABLE_TRURL}" \
         -e TRURL_VERSION="${TRURL_VERSION}" \
+        -e LLVM_MINGW_VERSION="${LLVM_MINGW_VERSION}" \
         "${container_image}" sh "${RELEASE_DIR}/${base_name}" 2>&1 | tee -a "${container_name}.log"
 
     # Exit script after docker finishes

@@ -111,16 +111,18 @@ install_packages() {
 configure_toolchain() {
     echo "Configuring compile toolchain, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
 
-    local mingw_path
+    local mingw_path common_flags
     mingw_path="/opt/llvm-mingw"
 
+    common_flags="-Os -ffunction-sections -fdata-sections"
     case "${ARCH}" in
     i686)
         export CC="${ARCH}-w64-mingw32-gcc" \
             CXX="${ARCH}-w64-mingw32-g++" \
             LD="${ARCH}-w64-mingw32-ld" \
             STRIP="${ARCH}-w64-mingw32-strip" \
-            CFLAGS="-DWINVER=0x0501 -D_WIN32_WINNT=0x0501 -D_WIN32_WINDOWS=0x0501 -D_WIN32_IE=0x0501 -Os -ffunction-sections -fdata-sections" \
+            CFLAGS="-DWINVER=0x0501 -D_WIN32_WINNT=0x0501 -D_WIN32_WINDOWS=0x0501 -D_WIN32_IE=0x0501 ${common_flags} -flto=auto -ffat-lto-objects -fuse-linker-plugin" \
+            CXXFLAGS="-DWINVER=0x0501 -D_WIN32_WINNT=0x0501 -D_WIN32_WINDOWS=0x0501 -D_WIN32_IE=0x0501 ${common_flags} -flto=auto -ffat-lto-objects -fuse-linker-plugin" \
             CPPFLAGS="-DWINVER=0x0501 -D_WIN32_WINNT=0x0501 -D_WIN32_WINDOWS=0x0501 -D_WIN32_IE=0x0501"
         ;;
     x86_64)
@@ -129,7 +131,8 @@ configure_toolchain() {
             CXX="${ARCH}-w64-mingw32-clang++" \
             LD="${mingw_path}/bin/${ARCH}-w64-mingw32-ld" \
             STRIP="${mingw_path}/bin/${ARCH}-w64-mingw32-strip" \
-            CFLAGS="-Os -ffunction-sections -fdata-sections" \
+            CFLAGS="${common_flags} -flto=thin -ffat-lto-objects" \
+            CXXFLAGS="${common_flags} -flto=thin -ffat-lto-objects" \
             CPPFLAGS="-I${mingw_path}/generic-w64-mingw32/include -I${mingw_path}/${ARCH}-w64-mingw32/include" \
             LDFLAGS="-L${mingw_path}/${ARCH}-w64-mingw32/lib --ld-path=${mingw_path}/bin/${ARCH}-w64-mingw32-ld ${LDFLAGS}"
         ;;

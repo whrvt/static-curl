@@ -105,9 +105,11 @@ arch_variants() {
     OPENSSL_ARCH=""
 
     case "${ARCH}" in
-        x86_64) EC_NISTP_64_GCC_128="enable-ec_nistp_64_gcc_128"
-                OPENSSL_ARCH="linux-x86_64" ;;
-        i686)   OPENSSL_ARCH="linux-x86" ;;
+        x86_64)  EC_NISTP_64_GCC_128="enable-ec_nistp_64_gcc_128"
+                 OPENSSL_ARCH="linux-x86_64" ;;
+        i686)    OPENSSL_ARCH="linux-x86" ;;
+        aarch64) EC_NISTP_64_GCC_128="enable-ec_nistp_64_gcc_128"
+                 OPENSSL_ARCH="linux-aarch64" ;;
     esac
 
     unset LD STRIP LDFLAGS

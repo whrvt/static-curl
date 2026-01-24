@@ -473,6 +473,7 @@ compile_tls() {
         -fPIC \
         --prefix="${PREFIX}" \
         threads no-shared \
+        no-tests \
         enable-ktls \
         ${ec_nistp_64_gcc_128} \
         enable-tls1_3 \
@@ -689,7 +690,7 @@ curl_config() {
             --enable-ipv6 --enable-unix-sockets --enable-socketpair \
             --enable-headers-api --enable-versioned-symbols \
             --enable-threaded-resolver --enable-optimize --enable-pthreads \
-            --enable-warnings --enable-werror \
+            --enable-warnings --disable-werror \
             --enable-curldebug --enable-dict --enable-netrc \
             --enable-bearer-auth --enable-tls-srp --enable-dnsshuffle \
             --enable-get-easy-options --enable-progress-meter \

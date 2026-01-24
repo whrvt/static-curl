@@ -397,6 +397,7 @@ compile_tls() {
         --prefix="${PREFIX}" \
         --openssldir=/etc/ssl \
         threads no-shared \
+        no-tests \
         enable-ktls \
         ${no_hw_padlock} \
         ${EC_NISTP_64_GCC_128} \
@@ -596,7 +597,7 @@ curl_config() {
             --enable-ipv6 --enable-unix-sockets --enable-socketpair \
             --enable-headers-api --enable-versioned-symbols \
             --enable-threaded-resolver --enable-optimize \
-            --enable-warnings --enable-werror \
+            --enable-warnings --disable-werror \
             --enable-curldebug --enable-dict --enable-netrc \
             --enable-bearer-auth --enable-tls-srp --enable-dnsshuffle \
             --enable-get-easy-options --enable-progress-meter \
@@ -627,13 +628,18 @@ compile_curl() {
     fi
 
     curl_config;
+    local curl_cflags="${CFLAGS}"
+
     if [ "${ARCH}" = "armv5" ] || [ "${ARCH}" = "armv7l" ] || [ "${ARCH}" = "armv7" ] || [ "${ARCH}" = "mipsel" ] || [ "${ARCH}" = "mips" ] \
         || [ "${ARCH}" = "powerpc" ] || [ "${ARCH}" = "i686" ]; then
         # add -Wno-cast-align to avoid error alignment from 4 to 8
-        make -j "$(nproc)" LDFLAGS="-static -all-static -Wl,-s,--gc-sections ${LDFLAGS}" CFLAGS="-Wno-cast-align ${CFLAGS}";
-    else
-        make -j "$(nproc)" LDFLAGS="-static -all-static -Wl,-s,--gc-sections ${LDFLAGS}";
+        curl_cflags="${curl_cflags} -Wno-cast-align";
+    elif [ "${ARCH}" = "aarch64" ]; then
+        # bogus LTO things
+        curl_cflags="${curl_cflags} -Wno-error=stringop-overflow=";
     fi
+
+    make -j "$(nproc)" LDFLAGS="-static -all-static -Wl,-s,--gc-sections ${LDFLAGS}" CFLAGS="${curl_cflags}";
 
     _copy_license COPYING curl;
     make install;

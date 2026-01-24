@@ -131,10 +131,10 @@ configure_toolchain() {
             CXX="${ARCH}-w64-mingw32-clang++" \
             LD="${mingw_path}/bin/${ARCH}-w64-mingw32-ld" \
             STRIP="${mingw_path}/bin/${ARCH}-w64-mingw32-strip" \
-            CFLAGS="-Qunused-arguments -Os -ffunction-sections -fdata-sections -flto=thin -ffat-lto-objects" \
-            CXXFLAGS="-Qunused-arguments -Os -ffunction-sections -fdata-sections -flto=thin -ffat-lto-objects" \
+            CFLAGS="-Qunused-arguments -Os -ffunction-sections -fdata-sections" \
+            CXXFLAGS="-Qunused-arguments -Os -ffunction-sections -fdata-sections" \
             CPPFLAGS="-I${mingw_path}/generic-w64-mingw32/include -I${mingw_path}/${ARCH}-w64-mingw32/include" \
-            LDFLAGS="-flto=thin -ffat-lto-objects -L${mingw_path}/${ARCH}-w64-mingw32/lib --ld-path=${mingw_path}/bin/${ARCH}-w64-mingw32-ld ${LDFLAGS}"
+            LDFLAGS="-L${mingw_path}/${ARCH}-w64-mingw32/lib --ld-path=${mingw_path}/bin/${ARCH}-w64-mingw32-ld ${LDFLAGS}"
         ;;
     esac
 }

@@ -228,7 +228,7 @@ jobs:
           ARES_VERSION=${ARES_VERSION:-latest} \
           ENABLE_TRURL=${ENABLE_TRURL:-false} \
           TRURL_VERSION=${TRURL_VERSION} \
-          LLVM_MINGW_VERSION=${LLVM_MINGW_VERSION:-20251216} \
+          LLVM_MINGW_VERSION=${LLVM_MINGW_VERSION:-20260116} \
           CONTAINER_IMAGE=${CONTAINER_IMAGE} \
           TOKEN_READ=${TOKEN_READ} \
           sh curl-static-win.sh

@@ -96,7 +96,9 @@ install_cross_compile_debian() {
 
     export LD="/usr/bin/${ARCH}-linux-gnu-ld" \
            STRIP="/usr/bin/${ARCH}-linux-gnu-strip" \
-           CFLAGS="-Os -ffunction-sections -fdata-sections"
+           CFLAGS="-Os -ffunction-sections -fdata-sections -flto=auto -ffat-lto-objects -fuse-linker-plugin" \
+           CXXFLAGS="-Os -ffunction-sections -fdata-sections -flto=auto -ffat-lto-objects -fuse-linker-plugin" \
+           LDFLAGS="-flto=auto -ffat-lto-objects -fuse-linker-plugin"
 }
 
 arch_variants() {

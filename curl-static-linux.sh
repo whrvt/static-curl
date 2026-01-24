@@ -88,19 +88,6 @@ install_packages() {
         curl wget git jq xz-utils grep sed groff gnupg libcunit1-dev libgpg-error-dev;
 }
 
-install_cross_compile_debian() {
-    echo "Setting up compile toolchain, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
-
-    export CC="${ARCH}-linux-gnu-gcc" \
-           CXX="${ARCH}-linux-gnu-g++"
-
-    export LD="/usr/bin/${ARCH}-linux-gnu-ld" \
-           STRIP="/usr/bin/${ARCH}-linux-gnu-strip" \
-           CFLAGS="-Os -ffunction-sections -fdata-sections -flto=auto -ffat-lto-objects -fuse-linker-plugin" \
-           CXXFLAGS="-Os -ffunction-sections -fdata-sections -flto=auto -ffat-lto-objects -fuse-linker-plugin" \
-           LDFLAGS="-flto=auto -ffat-lto-objects -fuse-linker-plugin"
-}
-
 arch_variants() {
     echo "Setting up the ARCH and OpenSSL arch, Arch: ${ARCH}"
     EC_NISTP_64_GCC_128=""
@@ -119,7 +106,16 @@ arch_variants() {
     export LDFLAGS="-L${PREFIX}/lib -L${PREFIX}/lib64";
     libc_flag="-glibc";
 
-    install_cross_compile_debian;
+    echo "Setting up compile toolchain, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
+
+    export CC="${ARCH}-linux-gnu-gcc" \
+           CXX="${ARCH}-linux-gnu-g++"
+
+    export LD="/usr/bin/${ARCH}-linux-gnu-ld" \
+           STRIP="/usr/bin/${ARCH}-linux-gnu-strip" \
+           CFLAGS="-Os -ffunction-sections -fdata-sections -flto=auto -ffat-lto-objects -fuse-linker-plugin" \
+           CXXFLAGS="-Os -ffunction-sections -fdata-sections -flto=auto -ffat-lto-objects -fuse-linker-plugin" \
+           LDFLAGS="-flto=auto -ffat-lto-objects -fuse-linker-plugin ${LDFLAGS}"
 }
 
 _get_github() {

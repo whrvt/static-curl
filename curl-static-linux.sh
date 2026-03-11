@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 # To compile locally, install Docker, clone the Git repository, navigate to the repository directory,
 # and then execute the following command:
@@ -453,11 +453,7 @@ compile_nghttp2() {
 }
 
 compile_ngtcp2() {
-    if [ "${TLS_LIB}" = "openssl" ]; then
-        return
-    fi
     echo "Compiling ngtcp2, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
-
     local url
     change_dir;
 
@@ -563,16 +559,6 @@ compile_trurl() {
 
 curl_config() {
     echo "Configuring curl, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
-    local with_openssl_quic
-
-    # --with-openssl-quic and --with-ngtcp2 are mutually exclusive
-    with_openssl_quic=""
-    if [ "${TLS_LIB}" = "openssl" ]; then
-        with_openssl_quic="--with-openssl-quic"
-    else
-        with_openssl_quic="--with-ngtcp2"
-    fi
-
     if [ ! -f configure ]; then
         autoreconf -fi;
     fi
@@ -582,8 +568,8 @@ curl_config() {
             --host="${TARGET}" \
             --prefix="${PREFIX}" \
             --enable-static --disable-shared \
-            --with-openssl "${with_openssl_quic}" --with-brotli --with-zstd \
-            --with-nghttp2 --with-nghttp3 \
+            --with-openssl --with-brotli --with-zstd \
+            --with-nghttp2 --with-nghttp3 --with-ngtcp2 \
             --with-libidn2 --with-libssh2 \
             --enable-hsts --enable-mime --enable-cookies \
             --enable-http-auth --enable-manual \
@@ -597,7 +583,7 @@ curl_config() {
             --enable-headers-api --enable-versioned-symbols \
             --enable-threaded-resolver --enable-optimize \
             --enable-warnings --disable-werror \
-            --enable-curldebug --enable-dict --enable-netrc \
+            --enable-dict --enable-netrc \
             --enable-bearer-auth --enable-tls-srp --enable-dnsshuffle \
             --enable-get-easy-options --enable-progress-meter \
             --with-ca-bundle=/etc/ssl/certs/ca-certificates.crt \

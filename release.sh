@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 init_env() {
     current_dir=$(dirname "$(realpath "$0")")

@@ -372,7 +372,7 @@ compile_ares() {
 
 compile_tls() {
     echo "Compiling ${TLS_LIB}, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
-    local url
+    local url ssl3 no_hw_padlock
     change_dir;
 
     if [ "${TLS_LIB}" = "quictls" ]; then
@@ -390,6 +390,19 @@ compile_tls() {
         no_hw_padlock="no-hw-padlock"
     fi
 
+    # ssl3 is deprecated in 4.x
+    major_ver="${OPENSSL_VERSION%%.*}"
+    if [ "${OPENSSL_VERSION}" = "dev" ] || { [ "${major_ver}" -ge 4 ] 2>/dev/null; }; then
+        ssl3=""
+        no_hw_padlock=""
+    else
+        ssl3="enable-ssl3 enable-ssl3-method"
+        case "${ARCH}" in
+            x86_64|i686) no_hw_padlock="no-hw-padlock" ;;
+            *) no_hw_padlock="" ;;
+        esac
+    fi
+
     ./Configure \
         ${OPENSSL_ARCH} \
         -fPIC \
@@ -401,7 +414,7 @@ compile_tls() {
         ${no_hw_padlock} \
         ${EC_NISTP_64_GCC_128} \
         enable-tls1_3 \
-        enable-ssl3 enable-ssl3-method \
+        ${ssl3} \
         enable-des enable-rc4 \
         enable-weak-ssl-ciphers \
         --static -static;
@@ -559,6 +572,24 @@ compile_trurl() {
 
 curl_config() {
     echo "Configuring curl, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
+
+    # Resolve OpenSSL 4.x compatibility issues where API returns 'const' pointers.
+    # These flags prevent "discarded-qualifiers" warnings from being treated as errors 
+    # when -Werror is enabled.
+    # - GCC: -Wno-error=discarded-qualifiers
+    # - Clang: -Wno-error=incompatible-pointer-types-discards-qualifiers
+    major_ver="${OPENSSL_VERSION%%.*}"
+    if [ "${OPENSSL_VERSION}" = "dev" ] || { [ "${major_ver}" -ge 4 ] 2>/dev/null; }; then
+        case "${CC}" in
+            clang*)
+                export CFLAGS="${CFLAGS} -Wno-error=incompatible-pointer-types-discards-qualifiers -Wno-error=cast-qual"
+                ;;
+            *)
+                export CFLAGS="${CFLAGS} -Wno-error=discarded-qualifiers -Wno-error=cast-qual"
+                ;;
+        esac
+    fi
+
     if [ ! -f configure ]; then
         autoreconf -fi;
     fi

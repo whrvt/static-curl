@@ -78,7 +78,7 @@ This script utilizes `clang`(glibc) and [qbt-musl-cross-make](https://github.com
 
 #### Linux
 
-- To compile locally, install Docker, clone the Git repository, navigate to the repository directory, and then execute the following command:  
+- Install Docker, clone this Git repository, navigate to the repository directory, and then execute the following command:  
 `sh curl-static-cross.sh`  
 The script will create a container and compile the host architecture cURL only.  
 
@@ -136,7 +136,7 @@ ARCHES="x86_64 arm64" \
 
 #### Windows
 
-- To compile locally, install Docker, clone the Git repository, navigate to the repository directory, and then execute the following command:  
+- Install Docker, clone this Git repository, navigate to the repository directory, and then execute the following command:  
   `ARCHES="x86_64 i686 aarch64 armv7" sh curl-static-win.sh`  
   script will create a Linux container and cross-compile cURL via [LLVM MinGW toolchain](https://github.com/mstorsjo/llvm-mingw).
 
@@ -170,10 +170,11 @@ For all `VERSION` variables, leaving them blank will automatically fetch the lat
 - `ARCHES`: The list of architectures to compile. You can set one or multiple architectures from the following options: [Compile](#Compile)
 - `TLS_LIB`: The TLS library. `openssl`(default, requires openssl 3.2.0+ and curl 8.6.0+) or `quictls`.
 - `LIBC`: The libc. `glibc`(default) or `musl`, only affects Linux.
-- `QBT_MUSL_CROSS_MAKE_VERSION`: The version of qbt-musl-cross-make, only affects Linux. The latest version `2516` is working fine. Check the releases on [qbt-musl-cross-make/releases](https://github.com/userdocs/qbt-musl-cross-make/releases)
-- `CURL_VERSION`: The version of cURL. If set to `dev`, will clone the latest source code from GitHub.
 - `QUICTLS_VERSION`: The version of quictls.
-- `OPENSSL_VERSION`: The version of OpenSSL.
+- `QBT_MUSL_CROSS_MAKE_VERSION`: The version of qbt-musl-cross-make, only affects `musl`. Check the releases on [qbt-musl-cross-make/releases](https://github.com/userdocs/qbt-musl-cross-make/releases)
+- `CURL_VERSION`: The version of cURL. If set to `dev`, will fetch the latest source code of branch `master` from GitHub.
+- `OPENSSL_VERSION`: The version of OpenSSL. If set to `dev`, will fetch the branch `OPENSSL_BRANCH` from GitHub.
+- `OPENSSL_BRANCH`: The branch that fetch from GitHub, this variable will be ignored if `OPENSSL_VERSION` is not set to `dev`.
 - `NGTCP2_VERSION`: The version of ngtcp2.
 - `NGHTTP3_VERSION`: The version of nghttp3.
 - `NGHTTP2_VERSION`: The version of nghttp2.

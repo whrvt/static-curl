@@ -116,7 +116,7 @@ configure_toolchain() {
 
     case "${ARCH}" in
     i686)
-        local shared_flags="-DWINVER=0x0501 -D_WIN32_WINNT=0x0501 -D_WIN32_WINDOWS=0x0501 -D_WIN32_IE=0x0501"
+        local shared_flags="-DWINVER=0x0600 -D_WIN32_WINNT=0x0600 -D_WIN32_WINDOWS=0x0600 -D_WIN32_IE=0x0600"
         export CC="${ARCH}-w64-mingw32-gcc" \
             CXX="${ARCH}-w64-mingw32-g++" \
             LD="${ARCH}-w64-mingw32-ld" \

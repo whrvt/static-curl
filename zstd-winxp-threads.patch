@@ -175,7 +175,7 @@ index e123cdf1..0339894b 100644
 -#ifdef WINVER
 -#  undef WINVER
 +#if defined(WINVER)
-+#  if WINVER > 0x0600
++#  if WINVER >= 0x0600
 +#    undef WINVER
 +#    define WINVER 0x0600
 +#  elif !defined(WINXP_COMPAT) && WINVER >= 0x0501
@@ -187,7 +187,7 @@ index e123cdf1..0339894b 100644
 -#ifdef _WIN32_WINNT
 -#  undef _WIN32_WINNT
 +#if defined(_WIN32_WINNT)
-+#  if _WIN32_WINNT > 0x0600
++#  if _WIN32_WINNT >= 0x0600
 +#    undef _WIN32_WINNT
 +#    define _WIN32_WINNT 0x0600
 +#  elif !defined(WINXP_COMPAT) && _WIN32_WINNT >= 0x0501

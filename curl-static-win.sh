@@ -319,11 +319,9 @@ compile_zlib() {
     mkdir -p out
     cd out/
 
-    PKG_CONFIG="pkg-config --static --with-path=${PREFIX}/lib/pkgconfig:${PREFIX}/lib64/pkgconfig" \
-            cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Windows -DBUILD_SHARED_LIBS=OFF \
-                  -DCMAKE_INSTALL_PREFIX="${PREFIX}" .. ;
-    PKG_CONFIG="pkg-config --static --with-path=${PREFIX}/lib/pkgconfig:${PREFIX}/lib64/pkgconfig" \
-        cmake --build . --config Release --target install;
+    cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Windows -DBUILD_SHARED_LIBS=OFF \
+            -DCMAKE_INSTALL_PREFIX="${PREFIX}" .. ;
+    cmake --build . --config Release --target install --parallel "$(nproc)";
     # Ensure libz.a exists for -lz static linking.
     if [ -f "${PREFIX}/lib/libz.a" ]; then
         :
@@ -363,7 +361,6 @@ compile_libidn2() {
     url="https://mirrors.kernel.org/gnu/libidn/libidn2-${LIBIDN2_VERSION}.tar.gz"
     download_and_extract "${url}"
 
-    PKG_CONFIG="pkg-config --static --with-path=${PREFIX}/lib/pkgconfig:${PREFIX}/lib64/pkgconfig" \
     LDFLAGS="${LDFLAGS} --static" \
     ./configure \
         --host "${TARGET}" \
@@ -385,7 +382,6 @@ compile_libpsl() {
     url="${URL}"
     download_and_extract "${url}"
 
-    PKG_CONFIG="pkg-config --static --with-path=${PREFIX}/lib/pkgconfig:${PREFIX}/lib64/pkgconfig" \
     LDFLAGS="${LDFLAGS} --static" \
       ./configure --host="${TARGET}" --prefix="${PREFIX}" \
         --enable-static --enable-shared=no --enable-builtin --disable-runtime;
@@ -509,10 +505,9 @@ compile_libssh2() {
     download_and_extract "${url}"
 
     autoreconf -fi
-    PKG_CONFIG="pkg-config --static --with-path=${PREFIX}/lib/pkgconfig:${PREFIX}/lib64/pkgconfig" \
-        ./configure --host="${TARGET}" --prefix="${PREFIX}" --enable-static --enable-shared=no \
-            --with-crypto=openssl --with-libssl-prefix="${PREFIX}" \
-            --disable-examples-build;
+    ./configure --host="${TARGET}" --prefix="${PREFIX}" --enable-static --enable-shared=no \
+        --with-crypto=openssl --with-libssl-prefix="${PREFIX}" \
+        --disable-examples-build;
     make -j "$(nproc)";
     make install;
 
@@ -529,9 +524,8 @@ compile_nghttp2() {
     download_and_extract "${url}"
 
     autoreconf -i --force
-    PKG_CONFIG="pkg-config --static --with-path=${PREFIX}/lib/pkgconfig:${PREFIX}/lib64/pkgconfig" \
-        ./configure --host="${TARGET}" --prefix="${PREFIX}" --enable-static --enable-http3 \
-            --enable-lib-only --enable-shared=no;
+    ./configure --host="${TARGET}" --prefix="${PREFIX}" --enable-static --enable-http3 \
+        --enable-lib-only --enable-shared=no;
     make -j "$(nproc)";
     make install;
 
@@ -548,9 +542,8 @@ compile_ngtcp2() {
     download_and_extract "${url}"
 
     autoreconf -i --force
-    PKG_CONFIG="pkg-config --static --with-path=${PREFIX}/lib/pkgconfig:${PREFIX}/lib64/pkgconfig" \
-        ./configure --host="${TARGET}" --prefix="${PREFIX}" --enable-static --with-openssl="${PREFIX}" \
-            --with-libnghttp3="${PREFIX}" --enable-lib-only --enable-shared=no;
+    ./configure --host="${TARGET}" --prefix="${PREFIX}" --enable-static --with-openssl=yes \
+        --with-libnghttp3="${PREFIX}" --enable-lib-only --enable-shared=no;
 
     make -j "$(nproc)";
     make install;
@@ -568,8 +561,7 @@ compile_nghttp3() {
     download_and_extract "${url}"
 
     autoreconf -i --force
-    PKG_CONFIG="pkg-config --static --with-path=${PREFIX}/lib/pkgconfig:${PREFIX}/lib64/pkgconfig" \
-        ./configure --host="${TARGET}" --prefix="${PREFIX}" --enable-static --enable-shared=no --enable-lib-only;
+    ./configure --host="${TARGET}" --prefix="${PREFIX}" --enable-static --enable-shared=no --enable-lib-only;
     make -j "$(nproc)";
     make install;
 
@@ -588,11 +580,9 @@ compile_brotli() {
     mkdir -p out
     cd out/
 
-    PKG_CONFIG="pkg-config --static" \
-        cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Windows -DBUILD_SHARED_LIBS=OFF \
-              -DCMAKE_COMPILE_PREFIX="${TARGET}" -DCMAKE_INSTALL_PREFIX="${PREFIX}" .. ;
-    PKG_CONFIG="pkg-config --static" \
-        cmake --build . --config Release --target install;
+    cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Windows -DBUILD_SHARED_LIBS=OFF \
+            -DCMAKE_COMPILE_PREFIX="${TARGET}" -DCMAKE_INSTALL_PREFIX="${PREFIX}" .. ;
+    cmake --build . --config Release --target install --parallel "$(nproc)";
 
     _copy_license ../LICENSE brotli;
     cd "${PREFIX}/lib/"
@@ -618,7 +608,7 @@ compile_zstd() {
 
     cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
           -DZSTD_BUILD_STATIC=ON -DZSTD_BUILD_SHARED=OFF ..;
-    cmake --build . --config Release --target install;
+    cmake --build . --config Release --target install --parallel "$(nproc)";
 
     if [ ! -f "${PREFIX}/lib/libzstd.a" ]; then cp -f lib/libzstd.a "${PREFIX}/lib/libzstd.a"; fi
     _copy_license ../../../LICENSE zstd
@@ -642,7 +632,7 @@ compile_trurl() {
 
     export PATH=${PREFIX}/bin:$PATH
 
-    LDFLAGS="-static -Wl,-s ${LDFLAGS}" make PREFIX="${PREFIX}";
+    LDFLAGS="-static -Wl,-s ${LDFLAGS}" make -j "$(nproc)" PREFIX="${PREFIX}";
     make install TARGET=trurl.exe;
 
     if [ -f LICENSES/COPYING ]; then
@@ -669,7 +659,6 @@ curl_config() {
     CPPFLAGS="-DCURL_STATICLIB -DCARES_STATICLIB -DHAS_ALPN ${CPPFLAGS}"
     CPPFLAGS="-DNGHTTP2_STATICLIB -DNGHTTP3_STATICLIB -DNGTCP2_STATICLIB ${CPPFLAGS}"
 
-    PKG_CONFIG="pkg-config --static" \
         ./configure \
             --host="${TARGET}" \
             --prefix="${PREFIX}" \
@@ -881,6 +870,7 @@ main() {
         export ARCH=${arch_temp}
         export PREFIX="${DIR}/curl-${ARCH}"
         export PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig:${PREFIX}/lib64/pkgconfig"
+        export PKG_CONFIG="pkg-config --static"
 
         echo "Architecture: ${ARCH}"
         echo "Prefix directory: ${PREFIX}"

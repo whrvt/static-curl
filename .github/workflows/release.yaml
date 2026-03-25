@@ -21,8 +21,6 @@ jobs:
           GCC_PATH: "/usr/lib/gcc-14/bin"
           ARCHES: x86_64 i686
           CURL_VERSION: ${{ vars.CURL_VERSION }}
-          TLS_LIB: ${{ vars.TLS_LIB }}
-          QUICTLS_VERSION: ${{ vars.QUICTLS_VERSION }}
           OPENSSL_VERSION: ${{ vars.OPENSSL_VERSION }}
           NGTCP2_VERSION: ${{ vars.NGTCP2_VERSION }}
           NGHTTP3_VERSION: ${{ vars.NGHTTP3_VERSION }}
@@ -48,8 +46,6 @@ jobs:
           PATH="${GCC_PATH}:${PATH}" \
           ARCHES="${ARCHES}" \
           CURL_VERSION=${CURL_VERSION} \
-          TLS_LIB=${TLS_LIB:-openssl} \
-          QUICTLS_VERSION=${QUICTLS_VERSION:-3.3.0} \
           OPENSSL_VERSION=${OPENSSL_VERSION} \
           NGTCP2_VERSION=${NGTCP2_VERSION} \
           NGHTTP3_VERSION=${NGHTTP3_VERSION:-} \
@@ -113,8 +109,6 @@ jobs:
         env:
           ARCHES: aarch64
           CURL_VERSION: ${{ vars.CURL_VERSION }}
-          TLS_LIB: ${{ vars.TLS_LIB }}
-          QUICTLS_VERSION: ${{ vars.QUICTLS_VERSION }}
           OPENSSL_VERSION: ${{ vars.OPENSSL_VERSION }}
           NGTCP2_VERSION: ${{ vars.NGTCP2_VERSION }}
           NGHTTP3_VERSION: ${{ vars.NGHTTP3_VERSION }}
@@ -136,8 +130,6 @@ jobs:
         run: |
           ARCHES="${ARCHES}" \
           CURL_VERSION=${CURL_VERSION} \
-          TLS_LIB=${TLS_LIB:-openssl} \
-          QUICTLS_VERSION=${QUICTLS_VERSION:-3.3.0} \
           OPENSSL_VERSION=${OPENSSL_VERSION} \
           NGTCP2_VERSION=${NGTCP2_VERSION} \
           NGHTTP3_VERSION=${NGHTTP3_VERSION:-} \
@@ -193,8 +185,6 @@ jobs:
           ARCHES: x86_64 i686
           LLVM_MINGW_VERSION: ${{ vars.LLVM_MINGW_VERSION }}
           CURL_VERSION: ${{ vars.CURL_VERSION }}
-          TLS_LIB: ${{ vars.TLS_LIB }}
-          QUICTLS_VERSION: ${{ vars.QUICTLS_VERSION }}
           OPENSSL_VERSION: ${{ vars.OPENSSL_VERSION }}
           NGTCP2_VERSION: ${{ vars.NGTCP2_VERSION }}
           NGHTTP3_VERSION: ${{ vars.NGHTTP3_VERSION }}
@@ -213,8 +203,6 @@ jobs:
         run: |
           ARCHES="${ARCHES}" \
           CURL_VERSION=${CURL_VERSION} \
-          TLS_LIB=${TLS_LIB:-openssl} \
-          QUICTLS_VERSION=${QUICTLS_VERSION:-3.3.0} \
           OPENSSL_VERSION=${OPENSSL_VERSION} \
           NGTCP2_VERSION=${NGTCP2_VERSION} \
           NGHTTP3_VERSION=${NGHTTP3_VERSION:-} \
@@ -312,10 +300,7 @@ jobs:
           sha256sum release/bin/curl-*
 
       - name: Compress and Create Release Note
-        env:
-          TLS_LIB: ${{ vars.TLS_LIB }}
         run: |
-          TLS_LIB=${TLS_LIB}
           bash release.sh
 
       - name: List compressed files
